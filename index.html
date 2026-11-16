@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Neon Stack</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: #030308;
+      color: #00f0ff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+      user-select: none;
+    }
+    .game-container {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      max-width: 450px;
+      padding: 10px;
+    }
+    .hud {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(10, 15, 30, 0.85);
+      border: 1px solid #00f0ff;
+      box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
+      padding: 10px 16px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      font-weight: bold;
+      letter-spacing: 1px;
+    }
+    .hud span {
+      color: #ff0055;
+      font-size: 1.1rem;
+    }
+    canvas {
+      background: radial-gradient(circle at center, #08081a 0%, #020208 100%);
+      border: 2px solid #00f0ff;
+      border-radius: 8px;
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.3);
+      width: 100%;
+      max-width: 450px;
+      aspect-ratio: 3 / 4;
+      display: block;
+      touch-action: none;
+    }
+    .overlay {
+      position: absolute;
+      top: 65px;
+      left: 10px;
+      right: 10px;
+      bottom: 10px;
+      background: rgba(3, 3, 8, 0.88);
+      border: 1px solid #ff0055;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      backdrop-filter: blur(4px);
+    }
+    .overlay h1 {
+      font-size: 2.2rem;
+      color: #00f0ff;
+      text-shadow: 0 0 10px #00f0ff, 0 0 20px #ff0055;
+      margin-bottom: 10px;
+    }
+    .overlay p {
+      color: #cccccc;
+      margin-bottom: 20px;
+      font-size: 0.95rem;
+      padding: 0 15px;
+    }
+    .btn {
+      background: transparent;
+      color: #ff0055;
+      border: 2px solid #ff0055;
+      padding: 12px 28px;
+      font-size: 1rem;
+      font-weight: bold;
+      letter-spacing: 1px;
+      border-radius: 30px;
+      cursor: pointer;
+      text-transform: uppercase;
+      box-shadow: 0 0 10px rgba(255, 0, 85, 0.4);
+      transition: all 0.2s ease-in-out;
+    }
+    .btn:hover {
+      background: #ff0055;
+      color: #fff;
+      box-shadow: 0 0 20px rgba(255, 0, 85, 0.8);
+      transform: scale(1.05);
+    }
+    .hidden {
+      display: none !important;
+    }
+    .instructions {
+      margin-top: 8px;
+      font-size: 0.8rem;
+      color: #606080;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="game-container">
+    <div class="hud">
+      <div>Score: <span id="scoreDisplay">0</span></div>
+      <div>Neon Stack</div>
+      <div>Best: <span id="highScoreDisplay">0</span></div>
+    </div>
+
+    <canvas id="gameCanvas" width="360" height="480"></canvas>
+
+    <div id="startScreen" class="overlay">
+      <h1>NEON STACK</h1>
+      <p>Time your drops carefully to stack glowing blocks as high as possible!</p>
+      <button class="btn" onclick="startGame()">Start Stacking</button>
+    </div>
+
+    <div id="gameOverScreen" class="overlay hidden">
+      <h1>TOWER COLLAPSE</h1>
+      <p id="overText">Score: 0</p>
+      <button class="btn" onclick="startGame()">Rebuild</button>
+    </div>
+
+    <div class="instructions">Controls: Click, Tap, or Press SPACEBAR to Drop Block</div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const scoreDisplay = document.getElementById('scoreDisplay');
+    const highScoreDisplay = document.getElementById('highScoreDisplay');
+    const startScreen = document.getElementById('startScreen');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const overText = document.getElementById('overText');
+
+    let score = 0;
+    let highScore = localStorage.getItem('neonStack_high') || 0;
+    let gameRunning = false;
+    let animationId;
+
+    const blockHeight = 25;
+    const stackX = canvas.width / 2;
+    let stack = [];
+    let currentBlock = {};
+    let cameraY = 0;
+
+    highScoreDisplay.innerText = highScore;
+
+    function initGame() {
+      score = 0;
+      stack = [];
+      cameraY = 0;
+      scoreDisplay.innerText = score;
+
+      // Base block
+      stack.push({
+        x: canvas.width / 2 - 60,
+        y: canvas.height - 50,
+        width: 120,
+        color: '#00f0ff'
+      });
+
+      spawnBlock();
+    }
+
+    function spawnBlock() {
+      const lastBlock = stack[stack.length - 1];
+      const colors = ['#00f0ff', '#ff0055', '#00ff66', '#ffe600', '#bd00ff'];
+      const color = colors[stack.length % colors.length];
+
+      currentBlock = {
+        x: 0,
+        y: lastBlock.y - blockHeight,
+        width: lastBlock.width,
+        speed: 2.5 + Math.min(stack.length * 0.15, 6),
+        direction: 1,
+        color: color
+      };
+    }
+
+    function dropBlock() {
+      if (!gameRunning) return;
+
+      const lastBlock = stack[stack.length - 1];
+      let overlap = currentBlock.width - Math.abs(currentBlock.x - lastBlock.x);
+
+      if (overlap <= 0) {
+        // Missed completely
+        endGame();
+        return;
+      }
+
+      // Trim block width to overlap
+      if (currentBlock.x < lastBlock.x) {
+        currentBlock.width -= (lastBlock.x - currentBlock.x);
+        currentBlock.x = lastBlock.x;
+      } else {
+        currentBlock.width = overlap;
+      }
+
+      stack.push({ ...currentBlock });
+      score++;
+      scoreDisplay.innerText = score;
+
+      if (score > highScore) {
+        highScore = score;
+        highScoreDisplay.innerText = highScore;
+        localStorage.setItem('neonStack_high', highScore);
+      }
+
+      // Shift camera upwards if tower gets tall
+      if (stack.length > 6) {
+        cameraY += blockHeight;
+      }
+
+      spawnBlock();
+    }
+
+    function update() {
+      if (!gameRunning) return;
+
+      // Move current block horizontally
+      currentBlock.x += currentBlock.speed * currentBlock.direction;
+
+      if (currentBlock.x <= 0 || currentBlock.x + currentBlock.width >= canvas.width) {
+        currentBlock.direction *= -1;
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.save();
+      ctx.translate(0, cameraY);
+
+      // Draw Stacked Blocks
+      stack.forEach((b) => {
+        ctx.fillStyle = b.color;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = b.color;
+        ctx.fillRect(b.x, b.y, b.width, blockHeight - 2);
+      });
+
+      // Draw Moving Block
+      if (gameRunning) {
+        ctx.fillStyle = currentBlock.color;
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = currentBlock.color;
+        ctx.fillRect(currentBlock.x, currentBlock.y, currentBlock.width, blockHeight - 2);
+      }
+
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+
+    function gameLoop() {
+      update();
+      draw();
+      if (gameRunning) {
+        animationId = requestAnimationFrame(gameLoop);
+      }
+    }
+
+    function startGame() {
+      initGame();
+      gameRunning = true;
+
+      startScreen.classList.add('hidden');
+      gameOverScreen.classList.add('hidden');
+
+      cancelAnimationFrame(animationId);
+      gameLoop();
+    }
+
+    function endGame() {
+      gameRunning = false;
+      cancelAnimationFrame(animationId);
+      overText.innerText = `Final Score: ${score}`;
+      gameOverScreen.classList.remove('hidden');
+    }
+
+    // Controls
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        dropBlock();
+      }
+    });
+
+    canvas.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      dropBlock();
+    });
+  </script>
+</body>
+</html>
