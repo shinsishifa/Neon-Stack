@@ -14,4 +14,4 @@
 
 ---
 
-to visit : `https://<username>.github.io/neon-stack/`
+to visit : https://shinsishifa.github.io/neon-stack/
